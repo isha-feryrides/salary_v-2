@@ -8,7 +8,6 @@ const calculateDailyWage = async (partnerId) => {
     let baseWage = BASE_WAGE;
     let dayOfWeek = moment().day();
     
-  
     let deductions = {
         earlyEnd: 0,
         halfDay: 0,
@@ -17,10 +16,10 @@ const calculateDailyWage = async (partnerId) => {
     };
 
     let partner = await getPartnerDetails(partnerId);
-    if (!partner) return { dailyWage: baseWage, deductions };
+    if (!partner) return { dailyWage: baseWage, deductions }; 
 
     let shiftDetails = await getShiftDetails(partnerId, today);
-    if (!shiftDetails) return { dailyWage: baseWage, deductions };
+    if (!shiftDetails) return { dailyWage: baseWage, deductions }; 
 
     let holidaysLeft = calculateHolidaysLeft(partner.dateOfJoining);
 
@@ -35,42 +34,53 @@ const calculateDailyWage = async (partnerId) => {
             baseWage -= deductions.noShow;
         }
     } else {
-        const result = applyDeductions(baseWage, shiftDetails);
+        const result = applyDeductions(baseWage, shiftDetails, partner);
         baseWage = result.baseWage;
-        deductions = result.deductions;
+        deductions = result.deductions || deductions; 
     }
 
-    return { dailyWage: baseWage, deductions };
+    return { dailyWage: Math.max(0, baseWage), deductions }; 
 };
 
-const applyDeductions = (baseWage, shiftDetails) => {
+
+const applyDeductions = (baseWage, shiftDetails, partner) => {
     let deductions = {
         earlyEnd: 0,
         halfDay: 0,
         late: 0,
         noShow: 0
     };
-    
 
-    let lateMinutes = getMinutesLate(shiftDetails.shiftStart, shiftDetails.startTime);
-    deductions.late = getDeductionAmount(DEDUCTION_RULES.late, lateMinutes);
-    baseWage -= deductions.late;
+    let expectedStartTime = moment(partner.slotStart, "HH:mm");
+    let actualStartTime = moment(shiftDetails.startTimeDisplay, "HH:mm");
+    let lateMinutes = actualStartTime.diff(expectedStartTime, 'minutes');
 
    
-    let workDuration = getWorkDuration(shiftDetails.startTime, shiftDetails.endTime, shiftDetails.breakDuration);
-    if (workDuration <= 300) {
-        deductions.halfDay = BASE_WAGE - DEDUCTION_RULES.halfDay;
-        baseWage = DEDUCTION_RULES.halfDay;
+    if (lateMinutes > 0) {
+        deductions.late = getDeductionAmount(DEDUCTION_RULES.late, lateMinutes);
     }
 
    
+    if (shiftDetails.halfDay) {
+        deductions.halfDay = BASE_WAGE / 2; 
+        baseWage = BASE_WAGE / 2;
+    }
+
+ 
+    let workDuration = getWorkDuration(shiftDetails.startTime, shiftDetails.endTime, shiftDetails.breakDuration);
+
+
     if (workDuration < 540) {
         deductions.earlyEnd = getDeductionAmount(DEDUCTION_RULES.earlyLeave, 540 - workDuration);
-        baseWage -= deductions.earlyEnd;
     }
-    
+
+ 
+    baseWage -= (deductions.late + deductions.earlyEnd);
+
     return { baseWage, deductions };
 };
+
+
 
 const calculateHolidaysLeft = (joiningDate) => {
     let joiningDay = moment(joiningDate, "YYYY-MM-DD").date();
@@ -82,12 +92,12 @@ const calculateHolidaysLeft = (joiningDate) => {
 };
 
 const getDeductionAmount = (rules, minutes) => {
-    if (minutes > 15 && minutes <= 60) return rules["15-60"];
-    if (minutes > 60) return rules[">60"];
+    if (minutes > 15 && minutes <= 60) return rules["15-60"]; 
+    if (minutes > 60) return rules[">60"]; 
     return 0;
 };
 
-const getMinutesLate = (shiftStart, startTime) => moment(startTime, "HH:mm").diff(moment(shiftStart, "HH:mm"), 'minutes');
+
 const getWorkDuration = (startTime, endTime, breakDuration) => moment(endTime, "HH:mm").diff(moment(startTime, "HH:mm"), 'minutes') - breakDuration;
 
 module.exports = { calculateDailyWage };

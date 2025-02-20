@@ -8,10 +8,13 @@ const calculateSalaries = async () => {
         const partners = partnersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         for (let partner of partners) {
-            const { dailyWage, deductions } = await calculateDailyWage(partner.id);
+            const wageData = await calculateDailyWage(partner.id);
+            
+
+            const { dailyWage, deductions } = wageData;
+
             console.log(`Salary for Partner ${partner.id}: Rs. ${dailyWage}`);
 
-          
             await db.collection('Partners').doc(partner.id).collection('DailyCheck').add({
                 date: new Date().toISOString().split('T')[0], 
                 deduction: {
@@ -32,6 +35,7 @@ const calculateSalaries = async () => {
         console.error("Error in salary calculation:", error);
     }
 };
+
 
 
 cron.schedule('* * * * *', () => {
