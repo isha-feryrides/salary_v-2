@@ -7,37 +7,69 @@ const calculateDailyWage = async (partnerId) => {
     let today = moment().format('YYYY-MM-DD');
     let baseWage = BASE_WAGE;
     let dayOfWeek = moment().day();
+    
+  
+    let deductions = {
+        earlyEnd: 0,
+        halfDay: 0,
+        late: 0,
+        noShow: 0
+    };
 
     let partner = await getPartnerDetails(partnerId);
-    if (!partner) return baseWage;
+    if (!partner) return { dailyWage: baseWage, deductions };
 
     let shiftDetails = await getShiftDetails(partnerId, today);
-    if (!shiftDetails) return baseWage;
+    if (!shiftDetails) return { dailyWage: baseWage, deductions };
 
     let holidaysLeft = calculateHolidaysLeft(partner.dateOfJoining);
 
     if (shiftDetails.noShow) {
         if (dayOfWeek === 0 || dayOfWeek === 6) {
-            if (holidaysLeft === 0) baseWage -= DEDUCTION_RULES.noShow;
+            if (holidaysLeft === 0) {
+                deductions.noShow = DEDUCTION_RULES.noShow;
+                baseWage -= deductions.noShow;
+            }
         } else {
-            baseWage -= DEDUCTION_RULES.noShow;
+            deductions.noShow = DEDUCTION_RULES.noShow;
+            baseWage -= deductions.noShow;
         }
     } else {
-        baseWage = applyDeductions(baseWage, shiftDetails);
+        const result = applyDeductions(baseWage, shiftDetails);
+        baseWage = result.baseWage;
+        deductions = result.deductions;
     }
 
-    return baseWage;
+    return { dailyWage: baseWage, deductions };
 };
 
 const applyDeductions = (baseWage, shiftDetails) => {
+    let deductions = {
+        earlyEnd: 0,
+        halfDay: 0,
+        late: 0,
+        noShow: 0
+    };
+    
+
     let lateMinutes = getMinutesLate(shiftDetails.shiftStart, shiftDetails.startTime);
-    baseWage -= getDeductionAmount(DEDUCTION_RULES.late, lateMinutes);
+    deductions.late = getDeductionAmount(DEDUCTION_RULES.late, lateMinutes);
+    baseWage -= deductions.late;
 
+   
     let workDuration = getWorkDuration(shiftDetails.startTime, shiftDetails.endTime, shiftDetails.breakDuration);
-    if (workDuration <= 300) baseWage = DEDUCTION_RULES.halfDay;
+    if (workDuration <= 300) {
+        deductions.halfDay = BASE_WAGE - DEDUCTION_RULES.halfDay;
+        baseWage = DEDUCTION_RULES.halfDay;
+    }
 
-    baseWage -= getDeductionAmount(DEDUCTION_RULES.earlyLeave, 540 - workDuration);
-    return baseWage;
+   
+    if (workDuration < 540) {
+        deductions.earlyEnd = getDeductionAmount(DEDUCTION_RULES.earlyLeave, 540 - workDuration);
+        baseWage -= deductions.earlyEnd;
+    }
+    
+    return { baseWage, deductions };
 };
 
 const calculateHolidaysLeft = (joiningDate) => {
